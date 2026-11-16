@@ -174,7 +174,7 @@ TOOL_ACCESS: dict[str, frozenset[str]] = {
 **Three real gotchas from this build:**
 
 1. **Redirect-URI / CORS mismatches** — `STATIC_REDIRECT_URIS` pins localhost:5173/3000; Keycloak's `webOrigins` must *exactly* match the browser origin or the token-endpoint CORS dies; wrong `Host` → `421 Misdirected Request` from the transport allowlist
-2. **No `scope` claim** — Keycloak doesn't emit one by default, so RBAC rides on the `groups` claim (one mapper, one claim, one map); we still *filter* `scopes_supported` so clients only ask for what exists
+2. **`scope` ≠ authorization** — Keycloak only echoes the OIDC scopes it granted (`openid profile email`); nothing maps a scope to a tool, so RBAC rides on the `groups` claim (one mapper, one claim, one map); we still *filter* `scopes_supported` so clients only ask for what exists
 3. **Two token lifetimes** — Keycloak user JWT (`exp`, 10 s leeway) vs Airflow service JWTs minted via `/auth/token`; a restarted Airflow container invalidates cached service tokens → 401/403 until refreshed
 
 ### Speaker notes
@@ -185,7 +185,7 @@ Now the three things that will bite you.
 
 **Redirect URIs and CORS.** Our static registration hands clients `http://localhost:5173/*` and friends — fine for Inspector, but the moment your client's redirect lands on another port, Keycloak rejects the code exchange. And two layers must agree: Keycloak's `webOrigins` on the `mcp-public` client (exact string match, or the browser can't even POST to the token endpoint) and our own `MCP_ALLOWED_ORIGINS` / `MCP_ALLOWED_HOSTS` for the MCP transport. Miss the host allowlist and you get a `421 Misdirected Request` that looks like an auth bug and isn't.
 
-**Scopes.** The MCP spec talks about scopes; Keycloak — like Okta by default — doesn't put a `scope` claim in the access token. We tried to make scope-based RBAC work and the honest answer was: it doesn't, not without custom protocol mappers. So authorization rides on the `groups` claim from `oidc-group-membership-mapper`, and the metadata layer still filters `scopes_supported` down to four so clients don't request things nobody enforces. Scope list = advertising; groups = enforcement. Keep them straight.
+**Scopes.** The MCP spec talks about scopes; Keycloak — like Okta by default — only echoes the OIDC scopes it granted into the token's `scope` claim (`openid profile email`), with no per-tool meaning. We tried to make scope-based RBAC work and the honest answer was: it doesn't, not without custom protocol mappers. So authorization rides on the `groups` claim from `oidc-group-membership-mapper`, and the metadata layer still filters `scopes_supported` down to four so clients don't request things nobody enforces. Scope list = advertising; groups = enforcement. Keep them straight.
 
 **Expiry and refresh.** Two completely different token lifetimes. The user's Keycloak JWT gets checked on every request — `exp` with ten seconds of leeway, kid-aware JWKS refresh. But downstream, the Airflow service JWTs are minted per identity via `/auth/token`, and a container restart invalidates what you cached — we hit exactly that during e2e: six failing checks that were all a stale service JWT, fixed with a retry on 401/403. User tokens need a refresh flow; service tokens need re-authentication on failure. Different problems, don't reuse the fix.
 
