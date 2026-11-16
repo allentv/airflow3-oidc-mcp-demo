@@ -67,7 +67,7 @@ Neither is a production topology — see *Demo-only shortcuts* below.
 ```bash
 cp .env.example .env        # optional — every value has a default
 docker compose up --build
-docker compose ps           # wait until all three services are healthy (~60 s)
+docker compose ps           # wait until Keycloak + Airflow report healthy (~60 s)
 ```
 
 On first boot Keycloak imports `keycloak/realm-export.json`: the realm, the pre-registered
@@ -108,7 +108,7 @@ npx @modelcontextprotocol/inspector
    four Airflow tools with their annotations.
 4. Run `list_dags` → the `demo_report` DAG comes back.
 5. Run `trigger_dag_run` with `dag_id: "demo_report"` → **denied**:
-   `tool 'trigger_dag_run' requires Keycloak group [airflow-operator]; token groups: [airflow-viewer]`.
+   `denied: tool 'trigger_dag_run' requires Keycloak group [airflow-operator]; token groups: [airflow-viewer]`.
 6. Log out / clear the Inspector's stored token, reconnect as **`bob` / `bob-demo`**,
    and the same call succeeds — a run shows up in Airflow under `demo_report`.
 
@@ -149,7 +149,7 @@ tok = os.environ["TOKEN"]
 print(json.dumps(json.loads(base64.urlsafe_b64decode(tok.split(".")[1] + "==")), indent=2))
 EOF
 # look for:  "iss": http://localhost:8080/realms/airflow-demo
-#            "aud": ["account", "http://localhost:8081/mcp"]
+#            "aud": "http://localhost:8081/mcp"
 #            "groups": ["airflow-viewer"]
 ```
 
@@ -211,9 +211,11 @@ sequenceDiagram
   `iss` == `http://localhost:8080/realms/airflow-demo`, `aud` contains
   `http://localhost:8081/mcp` (RFC 8707 resource indicator via Keycloak audience mapper),
   `exp` with 10 s leeway, required claims `exp/iat/iss/aud`.
-- **Not scope-based:** Keycloak does not emit a `scope` claim by default, so authorization
-  is carried by the `groups` claim — one mapper, one claim, one map. The metadata layer still
-  filters `scopes_supported` so MCP clients request only what exists.
+- **Not scope-based:** the `scope` claim Keycloak emits only echoes the granted OIDC client
+  scopes (`email profile`, or `openid profile email` when requested) — there are no per-tool
+  authorization scopes — so authorization is carried by the `groups` claim — one mapper, one
+  claim, one map. The metadata layer still filters `scopes_supported` so MCP clients request
+  only what exists.
 - **Two issuers on purpose:** the published metadata document's `issuer` must equal its own
   URL (RFC 8414), while the token's `iss` is Keycloak's. The resource server — not the
   client — is what checks the token issuer here.
