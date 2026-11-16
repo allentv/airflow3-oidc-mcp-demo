@@ -1,0 +1,117 @@
+{
+  "realm": "airflow-demo",
+  "displayName": "Airflow 3 MCP Demo",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": false,
+  "editUsernameAllowed": false,
+  "resetPasswordAllowed": false,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "passwordPolicy": "length(8)",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 86400,
+  "clients": [
+    {
+      "clientId": "mcp-public",
+      "name": "MCP Inspector / Claude Desktop (public PKCE client)",
+      "description": "Pre-registered public client for local MCP demos. Demo only: direct access grant is enabled so curl examples work.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*+http://127.0.0.1:5173/*+http://localhost:3000/*+http://127.0.0.1:3000/*"
+      },
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*",
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000"
+      ],
+      "defaultClientScopes": ["profile", "email", "roles", "web-origins"],
+      "optionalClientScopes": ["offline_access", "groups"],
+      "protocolMappers": [
+        {
+          "name": "mcp-resource-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "",
+            "included.custom.audience": "http://localhost:8081/mcp",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "name": "airflow-viewer",
+      "path": "/airflow-viewer",
+      "description": "Read-only MCP tools: list_dags, get_dag_runs, get_task_logs"
+    },
+    {
+      "name": "airflow-operator",
+      "path": "/airflow-operator",
+      "description": "All MCP tools including trigger_dag_run"
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@demo.local",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Viewer",
+      "credentials": [
+        { "type": "password", "value": "alice-demo", "temporary": false }
+      ],
+      "groups": ["/airflow-viewer"]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@demo.local",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Operator",
+      "credentials": [
+        { "type": "password", "value": "bob-demo", "temporary": false }
+      ],
+      "groups": ["/airflow-operator"]
+    }
+  ]
+}

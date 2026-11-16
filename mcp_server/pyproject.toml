@@ -1,0 +1,19 @@
+[project]
+name = "airflow3-oidc-mcp"
+version = "0.1.0"
+description = "Clean-room MCP server for Airflow 3 with OAuth 2.1/OIDC (Keycloak) auth and group-based guardrails"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.163.1",
+    "mcp==2.3.0",
+    "httpx==0.28.1",
+    "PyJWT[crypto]==2.15.1",
+    "uvicorn[standard]==0.54.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]

@@ -1,0 +1,83 @@
+## Local demo stack: Keycloak (OIDC) + Airflow 3 (REST API v2) + MCP server.
+## Zero-click: `docker compose up --build` imports the realm, no UI clicking.
+## All credentials below are LOCAL DEMO DEFAULTS — override via .env (see .env.example).
+name: airflow3-oidc-mcp
+
+services:
+  keycloak:
+    # 26.x: start-dev + --import-realm boots with keycloak/realm-export.json preloaded.
+    image: quay.io/keycloak/keycloak:26.8
+    command: ["start-dev", "--import-realm", "--http-port", "8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin-demo}
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      # Dev-file H2 storage so the imported realm survives restarts (demo only).
+      # Must be the image's existing data/ dir: docker copies its uid-1000 ownership,
+      # and /opt/keycloak/data/h2 does not exist in the image (would be root-owned).
+      - keycloak-data:/opt/keycloak/data
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '200 OK' <&3",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 45s
+
+  airflow:
+    build:
+      context: ./airflow
+    environment:
+      # Two least-privilege API identities (see airflow/entrypoint.sh):
+      #   mcp-reader -> viewer role, mcp-writer -> op role (can trigger DAG runs).
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "mcp-reader:viewer,mcp-writer:op"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW_READER_PASSWORD: ${AIRFLOW_READER_PASSWORD:-reader-demo}
+      AIRFLOW_WRITER_PASSWORD: ${AIRFLOW_WRITER_PASSWORD:-writer-demo}
+    ports:
+      - "${AIRFLOW_PORT:-8082}:8080"
+    healthcheck:
+      # /api/v2/monitor/health is public (no auth) in Airflow 3.
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/v2/monitor/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 60s
+
+  mcp-server:
+    build:
+      context: ./mcp_server
+    environment:
+      # URLs a *browser* (MCP Inspector) must reach:
+      MCP_PUBLIC_URL: "http://localhost:${MCP_PORT:-8081}"
+      MCP_RESOURCE: "http://localhost:${MCP_PORT:-8081}/mcp"
+      OIDC_ISSUER: "http://localhost:${KEYCLOAK_PORT:-8080}/realms/${KEYCLOAK_REALM:-airflow-demo}"
+      KEYCLOAK_PUBLIC_URL: "http://localhost:${KEYCLOAK_PORT:-8080}/realms/${KEYCLOAK_REALM:-airflow-demo}"
+      # URL the MCP server container uses for JWKS/discovery (docker-internal):
+      KEYCLOAK_INTERNAL_URL: "http://keycloak:8080/realms/${KEYCLOAK_REALM:-airflow-demo}"
+      OIDC_CLIENT_ID: "mcp-public"
+      # Airflow REST API v2 (docker-internal):
+      AIRFLOW_BASE_URL: "http://airflow:8080"
+      AIRFLOW_READER_USERNAME: "mcp-reader"
+      AIRFLOW_READER_PASSWORD: ${AIRFLOW_READER_PASSWORD:-reader-demo}
+      AIRFLOW_WRITER_USERNAME: "mcp-writer"
+      AIRFLOW_WRITER_PASSWORD: ${AIRFLOW_WRITER_PASSWORD:-writer-demo}
+      MCP_ALLOWED_HOSTS: "localhost:${MCP_PORT:-8081},127.0.0.1:${MCP_PORT:-8081}"
+      MCP_ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
+    ports:
+      - "${MCP_PORT:-8081}:8081"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      airflow:
+        condition: service_healthy
+
+volumes:
+  keycloak-data:
