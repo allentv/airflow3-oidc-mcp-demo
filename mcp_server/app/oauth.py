@@ -33,7 +33,7 @@ OIDC_CLIENT_ID = os.getenv("OIDC_CLIENT_ID", "mcp-public")
 
 # The only scopes this resource server understands. Keycloak (like Okta) happily
 # advertises dozens more; we filter them out of every document we publish.
-SUPPORTED_SCOPES = ("openid", "profile", "email", "offline_access")
+SUPPORTED_SCOPES = ("openid", "profile", "email")  # what the IdP will actually grant
 
 # Pre-registered redirect targets for local MCP clients (Inspector, playgrounds).
 STATIC_REDIRECT_URIS = (
