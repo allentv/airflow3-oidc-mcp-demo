@@ -92,7 +92,7 @@ async def _request(
     expected: tuple[int, ...] = (200,),
     **kwargs: Any,
 ) -> Any:
-    """Call Airflow, refreshing our own JWT once on a 401."""
+    """Call Airflow, refreshing our own JWT once on a 401/403 (expired or rotated service key)."""
     for attempt in (1, 2):
         headers = {"Authorization": f"Bearer {await _access_token(role)}"}
         headers.update(kwargs.pop("headers", {}))
@@ -100,8 +100,8 @@ async def _request(
             response = await _http().request(method, f"{AIRFLOW_BASE_URL}{path}", headers=headers, **kwargs)
         except httpx.HTTPError as exc:
             raise AirflowAPIError(0, f"cannot reach Airflow at {AIRFLOW_BASE_URL}: {exc}") from exc
-        if response.status_code == 401 and attempt == 1:
-            _tokens.pop(role, None)  # stale Airflow JWT: mint a fresh one, retry
+        if response.status_code in (401, 403) and attempt == 1:
+            _tokens.pop(role, None)  # stale Airflow JWT (expired/rotated): mint a fresh one, retry once
             continue
         if response.status_code not in expected:
             raise AirflowAPIError(response.status_code, _error_detail(response))
