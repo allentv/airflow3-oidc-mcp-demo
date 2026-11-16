@@ -162,6 +162,26 @@ AF_TOKEN=$(curl -s -X POST http://localhost:8082/auth/token \
 curl -s http://localhost:8082/api/v2/dags -H "Authorization: Bearer $AF_TOKEN" | jq '.dags[].dag_id'
 ```
 
+## OAuth smoke test with the MCP SDK
+
+`scripts/oauth_sdk_harness.py` drives the **official MCP Python SDK** through the real
+authorization-code + PKCE flow (no password grant): RFC 9728 discovery → static DCR →
+Keycloak login form → token exchange → `initialize` → `tools/list` → RBAC denial check.
+
+```bash
+uv run --with mcp==2.3.0 --with httpx python scripts/oauth_sdk_harness.py
+```
+
+Expected: `FAILURES: none` (8 checks). It works around two real-world quirks surfaced by
+this build:
+
+- Keycloak marks cookies `Secure` even on plain HTTP — a scripted login must strip the
+  flag or the login POST dies with `cookie_not_found` (KC logs `LOGIN_ERROR`).
+- Keycloak stamps an RFC 9207 `iss=` of its own issuer while our filtered AS metadata
+  declares `issuer=http://localhost:8081` (RFC 8414 §3.3 fetch-URL match); the harness
+  omits `iss` from the callback — valid because we don't advertise
+  `authorization_response_iss_parameter_supported`.
+
 ## What each file does
 
 ```text
